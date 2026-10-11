@@ -320,9 +320,7 @@ This project is licensed under the MIT License.
 
 # 👨‍💻 Author
 
-**Nikhil Singh**
-
-GitHub: https://github.com/Nv18
+**Anish Kumar**
 
 ---
 
