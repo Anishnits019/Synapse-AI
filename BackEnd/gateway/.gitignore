@@ -1,0 +1,15 @@
+# Dependencies (NEVER commit this)
+node_modules/
+
+# Environment variables & keys
+.env
+*.env
+serviceAccountKey.json
+
+# Logs & temp files
+*.log
+npm-debug.log*
+
+# OS / Editor files
+.DS_Store
+.vscode/

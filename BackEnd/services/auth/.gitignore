@@ -1,0 +1,24 @@
+# Local Dependencies
+node_modules/
+venv/
+.venv/
+
+# Environment Secrets
+.env
+*.env
+serviceAccountKey.json
+
+# Build Caches & Output
+dist/
+build/
+__pycache__/
+*.pyc
+
+# Logs & Temp
+*.log
+temp/
+
+# OS / Editor Junk
+.DS_Store
+.vscode/
+.idea/
