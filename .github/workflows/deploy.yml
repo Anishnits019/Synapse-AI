@@ -1,0 +1,149 @@
+name: synapse ai deployment
+# event when it wil run
+on:
+  push:
+    branches:
+      - main
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+## job name
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: aws configure
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Gateway
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file BackEnd/gateway/Dockerfile \
+            --tag "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/gateway:latest" \
+            --push \
+            BackEnd
+
+      - name: Build and push Auth
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file BackEnd/services/auth/Dockerfile \
+            --tag "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/auth-service:latest" \
+            --push \
+            BackEnd
+
+      - name: Build and push Chat
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file BackEnd/services/chat/Dockerfile \
+            --tag "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/chat-service:latest" \
+            --push \
+            BackEnd
+
+      - name: Build and push Agent
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file BackEnd/services/agent/Dockerfile \
+            --tag "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agent-service:latest" \
+            --push \
+            BackEnd
+
+      - name: Build and push Billing
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file BackEnd/services/billing/Dockerfile \
+            --tag "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/billing-service:latest" \
+            --push \
+            BackEnd
+
+      - name: deploy gateway
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --service "${{ secrets.GATEWAY }}" \
+            --force-new-deployment
+
+      - name: deploy auth
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --service "${{ secrets.AUTH_SERVICE }}" \
+            --force-new-deployment
+
+      - name: deploy chat 
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --service "${{ secrets.CHAT_SERVICE }}" \
+            --force-new-deployment
+
+      - name: deploy agent
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --service "${{ secrets.AGENT_SERVICE }}" \
+            --force-new-deployment
+
+      - name: deploy billing
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --service "${{ secrets.BILLING_SERVICE }}" \
+            --force-new-deployment
+
+  deploy-frontend:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build Frontend
+        run: |
+          cd FrontEnd
+          npm install
+          npm run build
+
+      - name: aws configure
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: upload to s3
+        run: |
+          aws s3 sync \
+            FrontEnd/dist \
+            "s3://${{ secrets.S3_BUCKET }}" \
+            --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/*"
+
+
