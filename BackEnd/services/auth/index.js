@@ -13,7 +13,7 @@ app.use(cookieParser())
 const port = process.env.PORT
 
 app.get("/",(req,res)=>{
-    res.json({message:"hello from auth"})
+    res.json({message:"hello from auth@v4"})
 })
 app.use("/",authRouter)
 
