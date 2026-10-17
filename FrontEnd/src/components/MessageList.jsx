@@ -44,6 +44,7 @@ export const MessageList = () => {
                 artifacts={message?.artifacts}
                 image_url={message?.image_url}
               />
+
             </div>
           ))}
           {isGenerating && (

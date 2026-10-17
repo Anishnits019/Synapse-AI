@@ -8,8 +8,8 @@ import {getMessages} from "../features/getMessages"
 import {setMessages } from "../redux/messageSlice"
 
 export const  ChatArea = () => {
+    
     const selectedConversation=useSelector(state=>state.conversation.selectedConversation)
-
     const dispatch=useDispatch()
 
     useEffect(()=>{

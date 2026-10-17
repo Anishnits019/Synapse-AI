@@ -38,6 +38,13 @@ export const login =async(req,res)=>{
         }),"EX",7*24*60*60)
 
 
+    //    res.cookie("session",sessionId,{
+    //     httpOnly:true,
+    //     secure:true,
+    //     sameSite:"none",
+    //     maxAge:7*24*60*60*1000
+    //    })
+
        res.cookie("session",sessionId,{
         httpOnly:true,
         secure:true,
@@ -50,8 +57,7 @@ export const login =async(req,res)=>{
     catch(error){
                console.error("Login error:", error)
                return res.status(500).json({
-                "message":`Login error${error}`
-               
+                "message":`Login error${error}`       
     })
 
     }
@@ -61,7 +67,6 @@ export const logout =async(req,res)=>{
     try{
         const sessionId=req.cookies?.session
         await redis.del(`session-${sessionId}`)
-
 
        res.clearCookie("session")
        return res.status(200).json({"message":"logout successfully"})

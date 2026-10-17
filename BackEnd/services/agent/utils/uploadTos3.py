@@ -9,12 +9,13 @@ BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 REGION = os.getenv("AWS_DEFAULT_REGION")
 
 def upload_to_s3(file_name, buffer, content_type):
+    object_key = f"generated-pdfs/{file_name}"
 
     s3.put_object(
         Bucket=BUCKET_NAME,
-        Key=file_name,
+        Key=object_key,
         Body=buffer,
         ContentType=content_type,
     )
-    return f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{quote(file_name)}"
 
+    return object_key

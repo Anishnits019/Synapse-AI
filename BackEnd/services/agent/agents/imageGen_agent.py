@@ -1,75 +1,99 @@
-from urllib.parse import quote
-import uuid
-import requests
-import boto3
 import os
-from ..utils.uploadTos3 import upload_to_s3
-from ..graph.state import AgentState
-from ..config.llm_model import getModel
-from langchain_core.output_parsers import StrOutputParser
+import uuid
+import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
-import urllib.parse
+import requests
+from ..config.llm_model import getModel
+from ..graph.state import AgentState
+from ..utils.getFromS3 import get_from_s3
+from ..utils.uploadTos3 import upload_to_s3
+from dotenv import load_dotenv,find_dotenv
+load_dotenv(find_dotenv())
+import base64
+import io 
 
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION", "us-east-1"),
-)
+QUERY_IMPROVE_PROMPT = """
+You are an expert AI Image Prompt Engineer specializing in generative visual models.
 
-def imageGenAgent(state:AgentState):
-     llm =getModel("chat")
-     query_improve_prompt = """
-You are an expert AI Image Prompt Engineer specializing in generative visual models (Midjourney, Stable Diffusion, DALL-E 3).
+Transform the user's request into a detailed but concise prompt. Specify the subject
+and action, style, composition, environment, lighting, colors, and visual details
+where relevant.
 
-YOUR TASK:
-Transform raw, vague, or simple user inputs into highly detailed, visually rich, and precise image generation prompts.
-
-ENHANCEMENT FRAMEWORK:
-When expanding a user prompt, enrich it by explicitly defining the following dimensions (if applicable):
-1. Subject & Action: Clear, detailed description of the core subjects, posture, and expressions.
-2. Art Style & Medium: Photorealistic (specify camera lens, lighting type, film stock) or Artistic (e.g., oil painting, digital art, cyberpunk, watercolor).
-3. Composition & Framing: Camera angle (e.g., wide shot, macro, cinematic low angle, depth of field).
-4. Environment & Background: Specific setting details, atmosphere, weather, and time of day.
-5. Lighting & Color Palette: Key lighting (e.g., volumetric rays, golden hour, moody chiaroscuro, neon glow) and dominant color schemes.
-6. Details & Rendering Quality: Micro-textures, high definition, sub-surface scattering, highly detailed.
-
-STRICT OUTPUT RULES:
-- Output ONLY the final enhanced prompt text.
-- Do NOT include intros, explanations, markdown commentary, or quotes.
-- Keep the language descriptive, evocative, and concise.
+Output only the final image prompt, without explanations, markdown, or quotes.
 """
-     response = llm.invoke([
-            SystemMessage(content=query_improve_prompt),
-            HumanMessage(content=state["prompt"]),
-       ])
-     image_gen_prompt = getattr(response, "content", "").strip()
 
-     encoded_prompt = urllib.parse.quote(image_gen_prompt)
+MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
-# Default free model (Flux)
 
-     pollinations_url = f"https://image.pollinations.ai/prompt/{quote(encoded_prompt)}?model=flux&nologo=true"
-     response = requests.get(pollinations_url, timeout=120)
-     print(response.status_code)
+async def imageGenAgent(state: AgentState):
+    
+     account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+     api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+
+     if not account_id or not api_token:
+        raise RuntimeError(
+            "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be configured"
+        )
+
+     llm = getModel("chat")
+     prompt_response = await llm.ainvoke([
+        SystemMessage(content=QUERY_IMPROVE_PROMPT),
+        HumanMessage(content=state["prompt"]),
+    ])
+     image_prompt = getattr(prompt_response, "content", "").strip()
+     if not image_prompt:
+        raise ValueError("The image prompt model returned an empty prompt")
+
+     url = (
+         f"https://api.cloudflare.com/client/v4/accounts/{account_id}"
+        f"/ai/run/{MODEL}"
+    )
+     headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json",
+    }
+     payload={
+        "prompt":image_prompt
+    }
+     response = requests.post(url, headers=headers, json=payload)
+   
+     if not  response.status_code == 200:
+       raise ValueError(
+           f"Cloudflare API failed with status {response.status_code}: {response.text}"
+     )
+
+     data = response.json()
+    
+     image_base64 = data.get("result", {}).get("image")
+    
+     if not image_base64:
+        raise ValueError(f"Cloudflare response did not contain image data: {data}")
+        
+     image_buffer = io.BytesIO(base64.b64decode(image_base64))
+     # Default to .jpg for Cloudflare image generation models
      
-    #  // It is the buffer of image we get as rwa data which we have passed into the upload_to_w3 which give the 
-     print(f"Pollinations status: {response.status_code}", flush=True)
+     extension = ".jpg"
+     content_type = "image/jpeg"
 
-     file_key = f"generated_images/{uuid.uuid4()}.jpg"
-     print(file_key)
+     if not extension or not response.content:
+        raise ValueError(
+            "Cloudflare returned an invalid image response "
+            f"(content type: {content_type or 'unknown'})"
+        )
 
-     s3_url=upload_to_s3(file_key,response.content,"image/jpeg")
-     print(s3_url)
+     filename = f"generated_images/{uuid.uuid4()}{extension}"
+     object_key = upload_to_s3(filename, image_buffer, content_type)
+     image_url = get_from_s3(object_key, expires_in=3600)
 
-     state["image_url"]=s3_url
+     print(image_url)
+
+     if not image_url:
+        raise RuntimeError("Uploaded image could not be retrieved from S3")
+
      state["chat_response"] = "Generated image successfully based on your prompt."
+     state["artifacts"] = [{
+        "name": filename,
+        "file_path": image_url,
+    }]
 
      return state
-
-
-
-
-
-     
-

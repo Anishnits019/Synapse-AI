@@ -9,7 +9,6 @@ import {ArtifactCard} from "./ArtifactCard"
 
 export const MessageBubble = ({ role, content, image, image_url, artifacts }) => {
     const isUser = role === "user"
-
     // Support single URL string or array of generated URLs
     const generatedImages = Array.isArray(image_url) 
         ? image_url 
@@ -20,7 +19,9 @@ export const MessageBubble = ({ role, content, image, image_url, artifacts }) =>
     const files = Array.isArray(artifacts)
         ? artifacts.flatMap((artifact) => (
             Array.isArray(artifact?.files) ? artifact.files : [artifact]
-        )).filter((file) => file?.name && file?.content != null)
+        )).filter((file) => (
+            file?.name && (file.content != null || file.file_path)
+        ))
         : []
 
     return (

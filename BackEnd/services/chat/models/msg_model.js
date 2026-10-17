@@ -3,7 +3,9 @@ import mongoose from "mongoose"
 const fileSchema =new mongoose.Schema(
     {
     name:String,
-    content:String
+    content:String,
+    file_path:String,
+    language:String
 },
 { _id: false })
 

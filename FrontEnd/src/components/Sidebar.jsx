@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, PanelLeftIcon, PanelRight, PenSquare, Plus, MessageSquare, User, LogOut, Coins, MoreHorizontal } from 'lucide-react'
 
-import { createConversation } from '../features/createConversation'
 import { getConversations } from '../features/getConversations'
 import { getLogOut } from '../features/logout'
 import { updateConversation } from '../features/updateConversation'
@@ -10,10 +9,12 @@ import { deleteConversation } from '../features/deleteConversation'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   setConversation,
-  addConversation,
   setselectedConversation
 } from '../redux/conversationSlice'
+import { clearInputText } from '../redux/chatSlice'
 
+import { signOut } from 'firebase/auth'
+import { auth } from '../../utils/firebase.js'
 import { setUserData } from '../redux/userSlice'
 import { setMessages } from '../redux/messageSlice'
 import { getCurrentUser } from '../features/getCurrentUser'
@@ -31,11 +32,23 @@ export const Sidebar = ({ onLogin }) => {
   const [showBilling,setShowBilling] =useState(false)
   const conversations = useSelector((state) => state.conversation.conversationList) || []
   const selectedConversation = useSelector((state) => state.conversation.selectedConversation)
+  const selectedConversationRef = useRef(selectedConversation)
+  const isNewChatDraft = useRef(false)
   const userData = useSelector((state) => state.user.userData)
   const userID = userData?.userID || userData?._id || userData?.id
 
   useEffect(() => {
-    if (!userID) return
+    selectedConversationRef.current = selectedConversation
+    if (selectedConversation) {
+      isNewChatDraft.current = false
+    }
+  }, [selectedConversation])
+
+  useEffect(() => {
+    if (!userID) {
+      isNewChatDraft.current = false
+      return
+    }
 
     const getConversation = async () => {
       const data = await getConversations()
@@ -43,14 +56,19 @@ export const Sidebar = ({ onLogin }) => {
       if (Array.isArray(data)) {
         dispatch(setConversation(data))
 
-        if (!selectedConversation && data.length > 0) {
+        if (
+          !selectedConversationRef.current &&
+          !isNewChatDraft.current &&
+          data.length > 0
+        ) {
+          selectedConversationRef.current = data[0]
           dispatch(setselectedConversation(data[0]))
         }
       }
     }
 
     getConversation()
-  }, [dispatch, selectedConversation, userID])
+  }, [dispatch, userID])
 
   useEffect(() => {
     const closeAccountMenu = (event) => {
@@ -64,10 +82,17 @@ export const Sidebar = ({ onLogin }) => {
   }, [])
 
   const handleCreateConversation = async () => {
-    const data = await createConversation()
-    if (!data?._id) return
-    dispatch(addConversation(data))
-    dispatch(setselectedConversation(data))
+    isNewChatDraft.current = true
+    selectedConversationRef.current = null
+    dispatch(setselectedConversation(null))
+    dispatch(clearInputText())
+    dispatch(setMessages([]))
+  }
+
+  const handleSelectConversation = (conversation) => {
+    isNewChatDraft.current = false
+    selectedConversationRef.current = conversation
+    dispatch(setselectedConversation(conversation))
   }
 
   const handleRenameConversation = async (conversation) => {
@@ -108,6 +133,9 @@ export const Sidebar = ({ onLogin }) => {
 
   const handleLogout = async () => {
     await getLogOut()
+    await signOut(auth)
+    isNewChatDraft.current = false
+    selectedConversationRef.current = null
     dispatch(setUserData(null))
     dispatch(setMessages([]))
     dispatch(setConversation([]))
@@ -248,7 +276,7 @@ export const Sidebar = ({ onLogin }) => {
                   return (
                     <div
                       key={conv?._id || i}
-                      onClick={() => dispatch(setselectedConversation(conv))}
+                      onClick={() => handleSelectConversation(conv)}
                       className={`relative flex items-center gap-2.5 cursor-pointer mb-0.5 px-3 py-2.5 rounded-[10px] border transition-colors duration-150
                       ${isActive ? "bg-indigo-500/10 border-indigo-500/[0.18]" : "bg-transparent border-transparent"}`}
                     >
@@ -388,7 +416,7 @@ export const Sidebar = ({ onLogin }) => {
                   return (
                     <div
                       key={conv?._id || i}
-                      onClick={() => dispatch(setselectedConversation(conv))}
+                      onClick={() => handleSelectConversation(conv)}
                       className={`relative flex items-center justify-center cursor-pointer mb-1.5 p-2 rounded-[10px] border transition-colors
                       ${isActive ? "bg-indigo-500/10 border-indigo-500/[0.18]" : "bg-transparent border-transparent"}`}
                     >

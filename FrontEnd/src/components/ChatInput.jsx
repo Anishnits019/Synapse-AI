@@ -1,5 +1,5 @@
 import { getCurrentUser } from '../features/getCurrentUser'
-import React, { useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 
 import {
   Paperclip,
@@ -9,7 +9,6 @@ import {
   MessageSquare,
   Code2,
   FileText,
-  Presentation,
   ImageIcon,
   Globe
 } from 'lucide-react'
@@ -19,8 +18,13 @@ import { createConversation } from '../features/createConversation'
 import { sendMessages } from '../features/sendMessage'
 import { addMessages, setGenerating } from '../redux/messageSlice'
 import { setUserData } from '../redux/userSlice'
+import { setInputText, clearInputText } from '../redux/chatSlice'
 
-import { addConversation,setselectedConversation } from '../redux/conversationSlice'
+import {
+    addConversation,
+    setConversation,
+    setselectedConversation
+} from '../redux/conversationSlice'
 import {upload} from "../features/upload"
 
 // TODO: import your actual sendMessages function, e.g.:
@@ -36,14 +40,16 @@ export const ChatInput = () => {
     const [uploadProgress, setUploadProgress] = useState(0)
     const [uploadError, setUploadError] = useState("")
     const [uploadedFiles,setUploadedFiles]=useState([])
-    const [text, setText] = useState("")
+    // const [text, setText] = useState("")
 
     const selectedconverstaion = useSelector(state => state.conversation.selectedConversation)
+    const conversationList = useSelector(state => state.conversation.conversationList) || []
+    const text=useSelector(state=>state.chat.inputText)
     const isGenerating = useSelector(state => state.message.isGenerating)
     const [selectedAgent,setselectedAgent]=useState("auto")
 
     const handleTextInput= (e) => {
-        setText(e.target.value)
+        dispatch(setInputText(e.target.value))
     }
 
     const handleTextKeyDown = (e) => {
@@ -115,12 +121,13 @@ export const ChatInput = () => {
             conversation_id: conversation?._id,
             agent: selectedAgent,
             artifacts: uploadedFiles,
+            generate_title: conversation?.title === "New Chat",
         }
  
 
         const userMessage = text.trim()
 
-        setText("")
+        dispatch(clearInputText())
         dispatch(setGenerating(true))
 
         dispatch(addMessages({
@@ -131,6 +138,23 @@ export const ChatInput = () => {
             try {
                 const response = await sendMessages(payload)
                 console.log(response)
+
+                if (response?.conversation_title) {
+                    const updatedConversation = {
+                        ...conversation,
+                        title: response.conversation_title,
+                    }
+                    dispatch(setselectedConversation(updatedConversation))
+                    const hasConversation = conversationList.some(
+                        (item) => item._id === conversation._id
+                    )
+                    dispatch(setConversation(hasConversation
+                        ? conversationList.map((item) =>
+                            item._id === conversation._id ? updatedConversation : item
+                        )
+                        : [updatedConversation, ...conversationList]
+                    ))
+                }
 
                 const updatedUser = await getCurrentUser()
                 if (updatedUser) {

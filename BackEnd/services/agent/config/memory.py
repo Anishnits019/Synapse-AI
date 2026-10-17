@@ -2,15 +2,17 @@ from pydantic import BaseModel
 from ..utils  import getMessages
 from .redis import redis_client
 import json
+from ..models import MessageModel,ConversationModel
 
-class conversationdModel(BaseModel):
-    conversation_id:str
+# class conversationdModel(BaseModel):
+#     conversation_id:str
 
-class MessageModel(BaseModel):
-    conversation_id:str
-    prompt:str
-    role:str
-    image_url:str=None
+# class MessageModel(BaseModel):
+#     conversation_id:str
+#     content:str
+#     role:str
+#     artifacts:list | None = None
+#     image_url:str=None
 
 async def getMemory(convo_id: str):
 
@@ -36,11 +38,14 @@ async def getMemory(convo_id: str):
      return messages
 
 async def addMessages(body:MessageModel):
+           
      
            convo_id=body.conversation_id
-           content=body.prompt
+           content=body.content
            role=body.role
+           artifacts=body.artifacts
            image_url=body.image_url
+
 
            redis_key =f"converstion:{convo_id}"
 
@@ -51,6 +56,7 @@ async def addMessages(body:MessageModel):
                  "converstaionID":convo_id,
                  "role":role,
                  "content":content,
+                 "artifacts":artifacts,
                  "image_url":image_url
            })
            if len(messages)>20:

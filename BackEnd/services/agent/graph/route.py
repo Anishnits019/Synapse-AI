@@ -4,9 +4,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 def route(state: AgentState):
-    if state["agent"] and state["agent"] != "auto":
-        return state
-
     llm = getModel("router")
     template = """You are a strict, ultra-precise Intent Classifier for an AI agent architecture.
 Your sole job is to evaluate the user's input query and route it to EXACTLY ONE of the allowed agent identifiers below.
@@ -60,7 +57,7 @@ Route to 'image_analyzer' if Artifacts (below) is not empty AND contains at leas
 ==================================================
 3. OUTPUT FORMAT CONSTRAINTS
 ==================================================
-- Return ONLY ONE lowercase word from this list: coding, search, pdf, ppt, image, chat, pdfrag, image_analyzer.
+- Return ONLY ONE lowercase word from this list: coding, search, pdf, image, chat, pdfrag, image_analyzer.
 - Do NOT output punctuation, quotes, markdown formatting, or explanations.
 
 User Query:
@@ -78,7 +75,5 @@ Artifacts:
         "prompt": state["prompt"],
         "artifacts": state.get("artifacts", "none")
     }).strip().lower()
-    
-    print(state["agent"])
 
     return state

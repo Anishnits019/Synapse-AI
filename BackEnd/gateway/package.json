@@ -7,12 +7,12 @@
     "dev": "nodemon index.js",
     "start": "node index.js"
   },
-  
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@sentry/node": "^11.7.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

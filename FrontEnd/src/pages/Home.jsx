@@ -28,7 +28,6 @@ export const Home = () => {
       const data = await signInWithPopup(auth, googleprovider)
       // data is a Firebase UserCredential Object it contains signed-in Firebase  user
 
-      console.log(data)
       // we have to first verify the accessToken inside the user.accesstoken such that i can get the user 
 
       const token =await data.user.getIdToken()
