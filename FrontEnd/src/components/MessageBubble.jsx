@@ -1,8 +1,13 @@
-import React, { useState } from 'react'
-import { User, Bot, FileCode, Check, Copy, ExternalLink } from 'lucide-react'
+import { User, Bot } from 'lucide-react'
 import Markdown from "react-markdown"
 import {GeneratedImage} from "./GeneratedImage"
 import {ArtifactCard} from "./ArtifactCard"
+
+const getMarkdownElementProps = (props) => {
+    const elementProps = { ...props }
+    delete elementProps.node
+    return elementProps
+}
 
 // Component to handle generated images nicely
 
@@ -23,6 +28,14 @@ export const MessageBubble = ({ role, content, image, image_url, artifacts }) =>
             file?.name && (file.content != null || file.file_path)
         ))
         : []
+    const imageFiles = files.filter((file) => (
+        file.file_path && (
+            file.type === "image" ||
+            file.content_type?.startsWith("image/") ||
+            /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name)
+        )
+    ))
+    const documentFiles = files.filter((file) => !imageFiles.includes(file))
 
     return (
         <div className={`flex items-start gap-2.5 px-3 md:px-5 py-1.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
@@ -59,18 +72,18 @@ export const MessageBubble = ({ role, content, image, image_url, artifacts }) =>
         ${isUser ? "text-white bg-indigo-600/20 px-3.5 py-2.5 rounded-2xl rounded-tr-none border border-indigo-500/20" : "text-slate-200"}`}>
         <Markdown
             components={{
-                p: ({node, ...props}) => <p className="m-0 [&:not(:first-child)]:mt-2" {...props} />,
-                h1: ({node, ...props}) => <h1 className="mt-3 mb-1.5 text-[18px] font-semibold text-slate-100 first:mt-0" {...props} />,
-                h2: ({node, ...props}) => <h2 className="mt-3 mb-1.5 text-[16px] font-semibold text-slate-100 first:mt-0" {...props} />,
-                h3: ({node, ...props}) => <h3 className="mt-2.5 mb-1 text-[15px] font-semibold text-slate-100 first:mt-0" {...props} />,
-                ul: ({node, ...props}) => <ul className="my-1.5 ml-4 list-disc space-y-0.5" {...props} />,
-                ol: ({node, ...props}) => <ol className="my-1.5 ml-4 list-decimal space-y-0.5" {...props} />,
-                li: ({node, ...props}) => <li className="text-[14.5px] leading-relaxed" {...props} />,
-                strong: ({node, ...props}) => <strong className="font-semibold text-slate-100" {...props} />,
-                a: ({node, ...props}) => <a className="text-indigo-400 hover:underline" target="_blank" rel="noreferrer" {...props} />,
-                code: ({node, ...props}) => <code className="rounded bg-white/[0.08] px-1 py-0.5 text-[13px]" {...props} />,
-                blockquote: ({node, ...props}) => <blockquote className="my-1.5 border-l-2 border-white/20 pl-3 text-slate-400" {...props} />,
-                hr: ({node, ...props}) => <hr className="my-3 border-white/10" {...props} />,
+                p: (props) => <p className="m-0 [&:not(:first-child)]:mt-2" {...getMarkdownElementProps(props)} />,
+                h1: (props) => <h1 className="mt-3 mb-1.5 text-[18px] font-semibold text-slate-100 first:mt-0" {...getMarkdownElementProps(props)} />,
+                h2: (props) => <h2 className="mt-3 mb-1.5 text-[16px] font-semibold text-slate-100 first:mt-0" {...getMarkdownElementProps(props)} />,
+                h3: (props) => <h3 className="mt-2.5 mb-1 text-[15px] font-semibold text-slate-100 first:mt-0" {...getMarkdownElementProps(props)} />,
+                ul: (props) => <ul className="my-1.5 ml-4 list-disc space-y-0.5" {...getMarkdownElementProps(props)} />,
+                ol: (props) => <ol className="my-1.5 ml-4 list-decimal space-y-0.5" {...getMarkdownElementProps(props)} />,
+                li: (props) => <li className="text-[14.5px] leading-relaxed" {...getMarkdownElementProps(props)} />,
+                strong: (props) => <strong className="font-semibold text-slate-100" {...getMarkdownElementProps(props)} />,
+                a: (props) => <a className="text-indigo-400 hover:underline" target="_blank" rel="noreferrer" {...getMarkdownElementProps(props)} />,
+                code: (props) => <code className="rounded bg-white/[0.08] px-1 py-0.5 text-[13px]" {...getMarkdownElementProps(props)} />,
+                blockquote: (props) => <blockquote className="my-1.5 border-l-2 border-white/20 pl-3 text-slate-400" {...getMarkdownElementProps(props)} />,
+                hr: (props) => <hr className="my-3 border-white/10" {...getMarkdownElementProps(props)} />,
             }}
         >
             {content}
@@ -78,10 +91,34 @@ export const MessageBubble = ({ role, content, image, image_url, artifacts }) =>
     </div>
 )}
 
-                {/* Render Artifacts / Code Snippets */}
-                {files.length > 0 && (
+                {imageFiles.length > 0 && (
+                    <div className={`flex max-w-full flex-wrap gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
+                        {imageFiles.map((file, index) => (
+                            <a
+                                key={`${file.name}-${index}`}
+                                href={file.file_path}
+                                target="_blank"
+                                rel="noreferrer"
+                                className='block max-w-[220px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/20'
+                                title={`Open ${file.name}`}
+                            >
+                                <img
+                                    src={file.file_path}
+                                    alt={file.name}
+                                    className='max-h-[180px] max-w-[220px] object-cover'
+                                />
+                                <span className='block max-w-[220px] truncate px-2.5 py-1.5 text-[11px] text-slate-300'>
+                                    {file.name}
+                                </span>
+                            </a>
+                        ))}
+                    </div>
+                )}
+
+                {/* Render documents and code snippets */}
+                {documentFiles.length > 0 && (
                     <div className="flex flex-col gap-2.5 w-full mt-1">
-                        {files.map((file, index) => (
+                        {documentFiles.map((file, index) => (
                             <ArtifactCard key={index} file={file} />
                         ))}
                     </div>

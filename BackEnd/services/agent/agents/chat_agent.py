@@ -1,14 +1,21 @@
-from ..graph.state import AgentState
-from ..config.llm_model import getModel
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from ..config.memory import getMemory
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage
 
-async def chatAgent(state:AgentState):
-     llm =getModel("chat")
-     search_context = state.get("search_context", "")
-     system_prompt=f"""
+from ..config.llm_model import getModel
+from ..exception import AgentError, AgentExecutionError
+from ..graph.state import AgentState
+from ..logger import logging
+
+
+logger = logging.getLogger(__name__)
+
+
+async def chatAgent(state: AgentState):
+    logger.info("Chat agent execution started")
+    try:
+        llm = getModel("chat")
+        search_context = state.get("search_context", "")
+        system_prompt=f"""
      You are CortexAI, an intelligent AI assistant.
 
      If search results exist, use them as factual context. Preserve relevant source links
@@ -30,7 +37,7 @@ async def chatAgent(state:AgentState):
 
  Formatting:
 
-- Use # for titles and ## for sections.
+ - Use # for titles and ## for sections.
  - Leave a blank line after headings.
 - Use bullet points for lists.
 - Use numbered lists for steps.
@@ -39,11 +46,18 @@ async def chatAgent(state:AgentState):
 - Never write headings and content on the same line.
 - Prefer a complete, useful answer over an unnecessarily short one; keep formatting readable."""
 
-     messages=[SystemMessage(content=system_prompt),*state.get("messages",[])]
-     chain = llm | StrOutputParser()
+        messages = [SystemMessage(content=system_prompt), *state.get("messages", [])]
+        chain = llm | StrOutputParser()
 
-     response = await chain.ainvoke(messages)
+        logger.debug("Invoking chat LLM chain asynchronously")
+        response = await chain.ainvoke(messages)
 
-     state["chat_response"] = response
-
-     return state
+        state["chat_response"] = response
+        logger.info("Chat agent completed successfully")
+        return state
+    except AgentError:
+        logger.exception("Chat agent failed")
+        raise
+    except Exception as error:
+        logger.exception("Chat agent failed")
+        raise AgentExecutionError("Chat agent failed to process the request") from error

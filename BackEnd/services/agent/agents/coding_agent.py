@@ -4,7 +4,12 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from ..config.llm_model import getModel
 from ..config.memory import getMemory
+from ..exception import AgentError, AgentExecutionError, AgentResponseError
 from ..graph.state import AgentState
+from ..logger import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 INTENT_SYSTEM_PROMPT = """You are an ultra-precise software engineering intent classifier. 
@@ -55,69 +60,95 @@ CRITICAL RULES:
 
 
 async def codingAgent(state: AgentState):
-    llm = getModel("coding")
-    user_prompt = state.get("prompt", "")
+    logger.info("Coding agent execution started")
+    try:
+        llm = getModel("coding")
+        user_prompt = state.get("prompt", "")
 
-    intent_response = await llm.ainvoke([
-        SystemMessage(content=INTENT_SYSTEM_PROMPT),
-        HumanMessage(content=user_prompt),
-    ])
-    intent = getattr(intent_response, "content", "").strip().upper()
-    state["intent"] = intent
-
-    history = await getMemory(state["conversationID"])
-    conversation_messages = []
-
-    for message in history:
-        content = message.get("content","")
-        if not content:
-            continue
-        if message.get("role") == "user":
-            conversation_messages.append(HumanMessage(content=content))
-        elif message.get("role") == "assistant":
-            conversation_messages.append(AIMessage(content=content))
-
-    if not conversation_messages or not (
-        isinstance(conversation_messages[-1], HumanMessage)
-        and conversation_messages[-1].content == user_prompt
-    ):
-        conversation_messages.append(HumanMessage(content=user_prompt))
-
-    if intent == "CODE_GENERATION":
-        response = await llm.ainvoke([
-            SystemMessage(content=CODE_GENERATION_SYSTEM_PROMPT),
-            *conversation_messages,
+        intent_response = await llm.ainvoke([
+            SystemMessage(content=INTENT_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
         ])
-        content = getattr(response, "content", "").strip()
+        intent = getattr(intent_response, "content", "").strip().upper()
+        state["intent"] = intent
 
-        try:
-            data = json.loads(content)
-            artifacts = [
-                {
+        history = await getMemory(state["conversationID"])
+        conversation_messages = []
+
+        for message in history:
+            content = message.get("content", "")
+            if not content:
+                continue
+            if message.get("role") == "user":
+                conversation_messages.append(HumanMessage(content=content))
+            elif message.get("role") == "assistant":
+                conversation_messages.append(AIMessage(content=content))
+
+        if not conversation_messages or not (
+            isinstance(conversation_messages[-1], HumanMessage)
+            and conversation_messages[-1].content == user_prompt
+        ):
+            conversation_messages.append(HumanMessage(content=user_prompt))
+
+        if intent == "CODE_GENERATION":
+            response = await llm.ainvoke([
+                SystemMessage(content=CODE_GENERATION_SYSTEM_PROMPT),
+                *conversation_messages,
+            ])
+            content = getattr(response, "content", "").strip()
+
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError as error:
+                raise AgentResponseError(
+                    "Coding model returned invalid JSON for generated files"
+                ) from error
+
+            if not isinstance(data, dict) or not isinstance(data.get("files"), list):
+                raise AgentResponseError(
+                    "Coding model response must contain a files list"
+                )
+
+            artifacts = []
+            for item in data["files"]:
+                if (
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("name"), str)
+                    or not isinstance(item.get("content"), str)
+                ):
+                    raise AgentResponseError(
+                        "Each generated file must include a string name and content"
+                    )
+                artifacts.append({
                     "name": item["name"],
                     "content": item["content"],
-                }
-                for item in data.get("files", [])
-                if isinstance(item, dict)
-                and "name" in item
-                and "content" in item
-            ]
+                })
+
+            if not artifacts:
+                raise AgentResponseError(
+                    "Coding model returned no generated files"
+                )
+
             state["artifacts"] = artifacts
             state["chat_response"] = "Generated: " + ", ".join(
                 artifact["name"] for artifact in artifacts
             )
-        except (json.JSONDecodeError, TypeError, KeyError) as error:
+        else:
+            response = await llm.ainvoke([
+                SystemMessage(content=GENERAL_CODING_SYSTEM_PROMPT),
+                HumanMessage(content=f"Task intent: {intent}"),
+                *conversation_messages,
+            ])
+            state["chat_response"] = getattr(response, "content", "").strip()
             state["artifacts"] = []
-            state["chat_response"] = (
-                f"Unable to parse the generated code response: {error}"
-            )
-    else:
-        response = await llm.ainvoke([
-            SystemMessage(content=GENERAL_CODING_SYSTEM_PROMPT),
-            HumanMessage(content=f"Task intent: {intent}"),
-            *conversation_messages,
-        ])
-        state["chat_response"] = getattr(response, "content", "").strip()
-        state["artifacts"] = []
 
-    return state
+        logger.info("Coding agent completed successfully")
+        return state
+    except AgentError:
+        logger.exception("Coding agent failed")
+        raise
+    except Exception as error:
+        logger.exception("Coding agent failed")
+        raise AgentExecutionError(
+            "Coding agent failed to process the request"
+        ) from error

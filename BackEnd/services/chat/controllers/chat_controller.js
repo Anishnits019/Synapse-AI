@@ -1,142 +1,175 @@
-import Conversation from "../models/convo_model.js"
-import Message from "../models/msg_model.js"
+import Conversation from "../models/convo_model.js";
+import Message from "../models/msg_model.js";
+import { AppError } from "../../../shared/errors.js";
 
-export const CreateConversation =async(req,res)=>{
-   try{
-    const userID=req.headers['x-user-id']
-    if (!userID) {
-      return res.status(400).json({ message: "User ID header (x-user-id) is required" })
+const requireUserId = (req) => {
+    const userId = req.headers["x-user-id"];
+    if (!userId) {
+        throw new AppError(
+            401,
+            "AUTHENTICATION_REQUIRED",
+            "Please sign in before accessing your conversations."
+        );
     }
-    const conversation=await Conversation.create({
-          userID:userID
-    })
-    return res.status(200).json(conversation)
-   }catch(error){
-      return res.status(500).json({
-        message:`create conversation error ${error}`
-      })
-   }
-}
+    return userId;
+};
 
-export const getConversations =async(req,res)=>{
-   try{
-    const userID=req.headers['x-user-id']
-    if (!userID) {
-      return res.status(400).json({ message: "User ID header (x-user-id) is required" })
+const requireValue = (value, message) => {
+    if (typeof value !== "string" || !value.trim()) {
+        throw new AppError(400, "INVALID_INPUT", message);
     }
-    const conversation=await Conversation.find({
-          $or: [
-            { userID: userID },
-            { user_id: userID }
-          ]
-    }).sort({updatedAt:-1})
+    return value.trim();
+};
 
-      console.log("Fetched conversations:", conversation)
+export const CreateConversation = async (req, res) => {
+    const userID = requireUserId(req);
+    const conversation = await Conversation.create({ userID });
+    return res.status(200).json(conversation);
+};
 
-    return res.status(200).json(conversation)
-   }catch(error){
-      return res.status(500).json({
-        message:`create conversation error ${error}`
-      })
-   }
-}
+export const getConversations = async (req, res) => {
+    const userID = requireUserId(req);
+    const conversations = await Conversation.find({
+        $or: [{ userID }, { user_id: userID }],
+    }).sort({ updatedAt: -1 });
+    return res.status(200).json(conversations);
+};
 
-export const updateConversation =async(req,res)=>{
-   try{
-    const {conversation_id,title}=req.body
-    const userID=req.headers['x-user-id']
-    if (!userID) {
-      return res.status(400).json({ message: "User ID header (x-user-id) is required" })
-    }
-    const update_conversation=await Conversation.findOneAndUpdate({
-      _id: conversation_id,
-      $or: [{ userID }, { user_id: userID }]
-    }, { title },
-     {returnDocument: 'after', 
-      runValidators:true
-    }
-  )
-    if (!update_conversation) {
-      return res.status(404).json({ message: "Conversation not found" })
-    }
-    return res.status(200).json(update_conversation)
-   }catch(error){
-      return res.status(500).json({
-        message:`create update_conversation error ${error}`
-      })
-   }
-}
+export const updateConversation = async (req, res) => {
+    const conversationId = requireValue(
+        req.body?.conversation_id,
+        "Please provide the conversation you want to update."
+    );
+    const title = requireValue(
+        req.body?.title,
+        "Please enter a title for this conversation."
+    );
+    const userID = requireUserId(req);
 
-export const deleteConversation =async(req,res)=>{
-   try{
-      const {conversation_id}=req.params
-      
-      const delete_conversation=await Conversation.findByIdAndDelete({
-         _id: conversation_id
-      })
-
-      const delete_messages= await Message.deleteMany({
-        conversation_id:conversation_id
-      })
-      return res.status(200).json({
-         message: "Conversation deleted successfully",
-         "delete_converstaion":delete_conversation,
-         "delete_messages":delete_messages
-      })
-   }catch(error){
-      return res.status(500).json({
-        message:`create conversation error ${error}`
-      })
-   }}
-
-export const saveMessage =async(req,res)=>{
-   try{
-      const {conversation_id,role,content,artifacts=[],image_url}=req.body
-    const message= await Message.create({
-        conversation_id:conversation_id,
-        role:role,
-        content:content,
-        artifacts: artifacts.length > 0 ? [{
-               type: artifacts.some((artifact) => artifact.file_path) ? "text" : "code",
-               files: artifacts.map(({name,content,file_path,language}) => ({
-                  name,
-                  ...(content != null && { content }),
-                  ...(file_path && { file_path }),
-                  ...(language && { language })
-               }))
-         }] : [],
-      image_url: image_url || undefined
-    })
-    return res.status(200).json(message)
-   }catch(error){
-      return res.status(500).json({
-        message:`create conversation error ${error}`
-      })
-   }
-}
-
-export const getMessages =async(req,res)=>{
-
-   try{
-    const userID=req.headers['x-user-id']
-    if (!userID) {
-      return res.status(400).json({ message: "User ID header (x-user-id) is required" })
-    }
-    const conversation=await Conversation.findOne({
-      _id:req.params.conversationId,
-      $or: [{ userID }, { user_id: userID }]
-    })
+    const conversation = await Conversation.findOneAndUpdate(
+        {
+            _id: conversationId,
+            $or: [{ userID }, { user_id: userID }],
+        },
+        { title },
+        { returnDocument: "after", runValidators: true }
+    );
     if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" })
+        throw new AppError(
+            404,
+            "CONVERSATION_NOT_FOUND",
+            "We couldn't find that conversation."
+        );
     }
-    const messages= await Message.find({
-        conversation_id:req.params.conversationId
-    })
-    
-    return res.status(200).json(messages)
-   }catch(error){
-      return res.status(500).json({
-        message:`create conversation error ${error}`
-      })
-   }
-}
+    return res.status(200).json(conversation);
+};
+
+export const deleteConversation = async (req, res) => {
+    const conversationId = requireValue(
+        req.params?.conversation_id,
+        "Please provide the conversation you want to delete."
+    );
+    const conversation = await Conversation.findByIdAndDelete(conversationId);
+    if (!conversation) {
+        throw new AppError(
+            404,
+            "CONVERSATION_NOT_FOUND",
+            "We couldn't find that conversation."
+        );
+    }
+
+    const messages = await Message.deleteMany({
+        conversation_id: conversationId,
+    });
+    return res.status(200).json({
+        message: "Conversation deleted successfully.",
+        delete_converstaion: conversation,
+        delete_messages: messages,
+    });
+};
+
+export const saveMessage = async (req, res) => {
+    const conversationId = requireValue(
+        req.body?.conversation_id,
+        "Please choose a conversation before sending a message."
+    );
+    const role = requireValue(
+        req.body?.role,
+        "The message sender is missing. Please try again."
+    );
+    const content = req.body?.content;
+    const artifacts = req.body?.artifacts ?? [];
+
+    if (
+        !Array.isArray(artifacts)
+        || artifacts.some((artifact) => (
+            !artifact
+            || typeof artifact !== "object"
+            || Array.isArray(artifact)
+        ))
+    ) {
+        throw new AppError(
+            400,
+            "INVALID_ARTIFACTS",
+            "One or more attachments are invalid. Please try again."
+        );
+    }
+    if (!["user", "assistant"].includes(role)) {
+        throw new AppError(
+            400,
+            "INVALID_MESSAGE_ROLE",
+            "This message could not be saved. Please try again."
+        );
+    }
+    if (
+        (content !== undefined && typeof content !== "string")
+        || (typeof content !== "string" && artifacts.length === 0)
+    ) {
+        throw new AppError(
+            400,
+            "INVALID_MESSAGE",
+            "The message content is invalid. Please try again."
+        );
+    }
+
+    const message = await Message.create({
+        conversation_id: conversationId,
+        role,
+        content,
+        artifacts: artifacts.length > 0
+            ? [{
+                type: artifacts.some((artifact) => artifact.file_path) ? "text" : "code",
+                files: artifacts.map(({ name, content: fileContent, file_path, language }) => ({
+                    name,
+                    ...(fileContent != null && { content: fileContent }),
+                    ...(file_path && { file_path }),
+                    ...(language && { language }),
+                })),
+            }]
+            : [],
+        image_url: req.body?.image_url || undefined,
+    });
+    return res.status(200).json(message);
+};
+
+export const getMessages = async (req, res) => {
+    const userID = requireUserId(req);
+    const conversationId = requireValue(
+        req.params?.conversationId,
+        "Please choose a conversation to view its messages."
+    );
+    const conversation = await Conversation.findOne({
+        _id: conversationId,
+        $or: [{ userID }, { user_id: userID }],
+    });
+    if (!conversation) {
+        throw new AppError(
+            404,
+            "CONVERSATION_NOT_FOUND",
+            "We couldn't find that conversation."
+        );
+    }
+
+    const messages = await Message.find({ conversation_id: conversationId });
+    return res.status(200).json(messages);
+};

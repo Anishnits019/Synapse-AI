@@ -1,0 +1,9 @@
+$kind: http-request
+name: http://localhost:8003/upload
+description: ""
+url: http://localhost:8003/upload
+method: POST
+body:
+  type: json
+  content: ""
+order: 1000

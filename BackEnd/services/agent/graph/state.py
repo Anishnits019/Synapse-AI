@@ -8,6 +8,8 @@ class ArtifactField(TypedDict, total=False):
     language: str
     type: str
     file_path: str
+    s3_key: str
+    content_type: str
 
 class AgentState(TypedDict):
     prompt: str

@@ -1,16 +1,13 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv,find_dotenv
+from dotenv import find_dotenv, load_dotenv
 load_dotenv(find_dotenv())
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-google_api_key = os.getenv("GOOGLE_API_KEY") 
+from langchain_cohere import CohereEmbeddings
 
-embeddings = GoogleGenerativeAIEmbeddings(
-	model="gemini-embedding-2-preview",
-	google_api_key=google_api_key,
+cohere_api_key = os.getenv("COHERE_API_KEY") 
+
+embeddings = CohereEmbeddings(
+    model="embed-english-v3.0",  # Or "embed-multilingual-v3.0" depending on your documents
+    cohere_api_key=cohere_api_key,
 )
-
-
-
-

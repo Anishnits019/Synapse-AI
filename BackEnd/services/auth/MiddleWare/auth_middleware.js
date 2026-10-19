@@ -1,24 +1,32 @@
 import redis from "../../../shared/redis/redis.js"
+import { AppError } from "../../../shared/errors.js"
+
 export const Protect=async(req,res,next)=>{
-    try{
     const sessionID=req.cookies?.session
     if(!sessionID){
-        return res.status(400).json({
-           messages: "Unauthorized"
-        })
+        throw new AppError(
+            401,
+            "AUTHENTICATION_REQUIRED",
+            "Please sign in to continue."
+        )
     }
     const session=await redis.get(`session-${sessionID}`)
     if(!session){
-        return res.status(400).json({
-            messages:"Session expires"
-        })
+        throw new AppError(
+            401,
+            "SESSION_EXPIRED",
+            "Your session has expired. Please sign in again."
+        )
     }
-    req.user=JSON.parse(session)
-    next()
-}
-    catch(error){
-        return res.status(500).json({
-            messages:`protect error ${error}`
-    })
-}
+    try {
+        req.user=JSON.parse(session)
+    } catch (cause) {
+        throw new AppError(
+            401,
+            "INVALID_SESSION",
+            "Your session is no longer valid. Please sign in again.",
+            { cause }
+        )
+    }
+    return next()
 }

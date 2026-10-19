@@ -1,5 +1,5 @@
 import { getCurrentUser } from '../features/getCurrentUser'
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 import {
   Paperclip,
@@ -32,14 +32,12 @@ import {upload} from "../features/upload"
 
 export const ChatInput = () => {
     const fileInputRef = useRef(null)
+    const previewUrlsRef = useRef(new Set())
+    const uploadControllersRef = useRef(new Map())
     const dispatch =useDispatch()
     //  this dispatch use here to get the messages instanly in chat area when it user click and messages shown instanly
 
     const [selectedFiles, setSelectedFiles] = useState([])
-    const [isUploading, setIsUploading] = useState(false)
-    const [uploadProgress, setUploadProgress] = useState(0)
-    const [uploadError, setUploadError] = useState("")
-    const [uploadedFiles,setUploadedFiles]=useState([])
     // const [text, setText] = useState("")
 
     const selectedconverstaion = useSelector(state => state.conversation.selectedConversation)
@@ -47,6 +45,17 @@ export const ChatInput = () => {
     const text=useSelector(state=>state.chat.inputText)
     const isGenerating = useSelector(state => state.message.isGenerating)
     const [selectedAgent,setselectedAgent]=useState("auto")
+    const readyFiles = selectedFiles
+        .filter(({ status, uploadedFile }) => status === "ready" && uploadedFile)
+        .map(({ uploadedFile }) => uploadedFile)
+    const isUploading = selectedFiles.some(({ status }) => status === "uploading")
+
+    useEffect(() => () => {
+        uploadControllersRef.current.forEach((controller) => controller.abort())
+        uploadControllersRef.current.clear()
+        previewUrlsRef.current.forEach((previewUrl) => URL.revokeObjectURL(previewUrl))
+        previewUrlsRef.current.clear()
+    }, [])
 
     const handleTextInput= (e) => {
         dispatch(setInputText(e.target.value))
@@ -55,8 +64,6 @@ export const ChatInput = () => {
     const handleTextKeyDown = (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            if(isUploading) return
-
             handleSendMessage()
         }
     }
@@ -65,41 +72,81 @@ export const ChatInput = () => {
         fileInputRef.current.click()
     }
 
-    const handleFileChange = async (e) => {
+    const handleFileChange = (e) => {
         const files = Array.from(e.target.files || [])
+        e.target.value = ""
 
         if (!files.length) return
-        setSelectedFiles(files)
-        setUploadError("")
-        setUploadProgress(0)
-        setIsUploading(true)
+        const nextFiles = files.map((file) => {
+            const previewUrl = URL.createObjectURL(file)
+            previewUrlsRef.current.add(previewUrl)
+            return {
+                id: crypto.randomUUID(),
+                file,
+                previewUrl,
+                status: "uploading",
+                progress: 0,
+                uploadedFile: null,
+                error: "",
+            }
+        })
+        setSelectedFiles((current) => [...current, ...nextFiles])
 
-        const formData = new FormData()
-        files.forEach((file) => formData.append("file", file))
+        nextFiles.forEach((selectedFile) => {
+            const controller = new AbortController()
+            uploadControllersRef.current.set(selectedFile.id, controller)
+            const formData = new FormData()
+            formData.append("file", selectedFile.file)
 
-        try {
-            const response = await upload(formData, (event) => {
-                if (event.total) {
-                    setUploadProgress(Math.round((event.loaded * 100) / event.total))
-                }
-            })
-            if (!response?.files) throw new Error("File upload failed")
-            setUploadedFiles(response.files)
-            setUploadProgress(100)
-        } catch (error) {
-            console.error(error)
-            setUploadedFiles([])
-            setUploadError(error.response?.data?.detail || error.response?.data?.message || "Upload failed. Please try again.")
-        } finally {
-            setIsUploading(false)
-        }
+            upload(formData, (event) => {
+                if (!event.total) return
+                const progress = Math.round((event.loaded * 100) / event.total)
+                setSelectedFiles((current) => current.map((item) => (
+                    item.id === selectedFile.id ? { ...item, progress } : item
+                )))
+            }, controller.signal)
+                .then((response) => {
+                    const uploadedFile = response?.files?.[0]
+                    if (!uploadedFile) throw new Error("Upload response did not contain the uploaded file")
+                    setSelectedFiles((current) => current.map((item) => (
+                        item.id === selectedFile.id
+                            ? { ...item, status: "ready", progress: 100, uploadedFile }
+                            : item
+                    )))
+                })
+                .catch((error) => {
+                    if (controller.signal.aborted) return
+                    setSelectedFiles((current) => current.map((item) => (
+                        item.id === selectedFile.id
+                            ? {
+                                ...item,
+                                status: "failed",
+                                error: error.response?.data?.detail || error.message || "Upload failed. Please try again.",
+                            }
+                            : item
+                    )))
+                })
+                .finally(() => {
+                    if (uploadControllersRef.current.get(selectedFile.id) === controller) {
+                        uploadControllersRef.current.delete(selectedFile.id)
+                    }
+                })
+        })
     }
-    
 
-    
+    const handleRemoveFile = (index) => {
+        const selectedFile = selectedFiles[index]
+        if (selectedFile) {
+            uploadControllersRef.current.get(selectedFile.id)?.abort()
+            uploadControllersRef.current.delete(selectedFile.id)
+            URL.revokeObjectURL(selectedFile.previewUrl)
+            previewUrlsRef.current.delete(selectedFile.previewUrl)
+        }
+        setSelectedFiles((current) => current.filter((file) => file.id !== selectedFile?.id))
+    }
+
     const handleSendMessage = async () => {
-        if (!text.trim()) return
-        if(isUploading) return 
+        if (!text.trim() && !readyFiles.length) return
 
         let conversation = selectedconverstaion
         if(!selectedconverstaion){
@@ -120,7 +167,7 @@ export const ChatInput = () => {
             prompt: text.trim(),
             conversation_id: conversation?._id,
             agent: selectedAgent,
-            artifacts: uploadedFiles,
+            artifacts: readyFiles,
             generate_title: conversation?.title === "New Chat",
         }
  
@@ -129,15 +176,26 @@ export const ChatInput = () => {
 
         dispatch(clearInputText())
         dispatch(setGenerating(true))
-
         dispatch(addMessages({
             role:"user",
-            content:userMessage
+            content:userMessage,
+            artifacts: readyFiles,
         }))
+        const sentFileIds = new Set(
+            selectedFiles
+                .filter(({ status, uploadedFile }) => status === "ready" && uploadedFile)
+                .map(({ id }) => id)
+        )
+        selectedFiles
+            .filter(({ id }) => sentFileIds.has(id))
+            .forEach(({ previewUrl }) => {
+                URL.revokeObjectURL(previewUrl)
+                previewUrlsRef.current.delete(previewUrl)
+        })
+        setSelectedFiles((current) => current.filter(({ id }) => !sentFileIds.has(id)))
         
             try {
                 const response = await sendMessages(payload)
-                console.log(response)
 
                 if (response?.conversation_title) {
                     const updatedConversation = {
@@ -169,9 +227,6 @@ export const ChatInput = () => {
                         image_url: response.image_url || null
                     }))
                 }
-                setUploadedFiles([])
-                setSelectedFiles([])
-                setUploadProgress(0)
             } finally {
                 dispatch(setGenerating(false))
             }
@@ -268,28 +323,42 @@ export const ChatInput = () => {
 
                 />
 
-                {(selectedFiles.length > 0 || uploadError) && (
-                    <div className='flex flex-wrap items-start gap-3 rounded-xl border border-white/[0.06] bg-black/10 p-2.5'>
-                        {selectedFiles.map((file) => {
-                            const isImage = file.type.startsWith('image/')
-                            const progress = uploadError ? 100 : uploadProgress
+                {selectedFiles.length > 0 && (
+                    <div className='flex flex-wrap items-start gap-2 rounded-xl border border-white/[0.06] bg-black/10 p-2.5'>
+                        {selectedFiles.map(({ id, file, previewUrl, status, progress, error }, index) => {
+                            const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name)
+                            const fileExtension = file.name.split('.').pop()?.toUpperCase() || 'FILE'
                             return (
-                                <div key={`${file.name}-${file.lastModified}`} className='group flex w-16 flex-col items-center gap-1.5' title={file.name}>
-                                    <div
-                                        className={`flex h-14 w-14 items-center justify-center rounded-full p-[3px] ${uploadError ? 'bg-rose-400' : 'bg-indigo-400'}`}
-                                        style={{ background: `conic-gradient(${uploadError ? '#fb7185' : '#818cf8'} ${progress}%, rgba(255,255,255,.08) ${progress}% 100%)` }}
-                                    >
-                                        <div className='flex h-full w-full items-center justify-center rounded-full bg-[#151821] text-slate-300'>
-                                            {isImage ? <ImageIcon size={18} /> : <FileText size={18} />}
+                                <div key={id} className='relative flex h-[76px] w-[230px] items-center gap-2.5 overflow-hidden rounded-xl border border-white/[0.08] bg-[#11141b] pr-8' title={file.name}>
+                                    {isImage ? (
+                                        <img
+                                            src={previewUrl}
+                                            alt={file.name}
+                                            className='h-[76px] w-[76px] shrink-0 object-cover'
+                                        />
+                                    ) : (
+                                        <div className='flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-1 bg-white/[0.04] text-indigo-300'>
+                                            <FileText size={20} />
+                                            <span className='text-[9px] font-semibold'>{fileExtension}</span>
                                         </div>
+                                    )}
+                                    <div className='min-w-0'>
+                                        <p className='truncate text-xs font-medium text-slate-200'>{file.name}</p>
+                                        <p className={`mt-1 truncate text-[10px] ${status === 'failed' ? 'text-rose-300' : 'text-slate-500'}`} title={error}>
+                                            {status === 'uploading' ? `Uploading ${progress}%` : status === 'failed' ? error : 'Ready to send'}
+                                        </p>
                                     </div>
-                                    <span className='w-full truncate text-center text-[10px] text-slate-400'>
-                                        {isUploading ? `${progress}%` : uploadError ? 'Failed' : 'Uploaded'}
-                                    </span>
+                                    <button
+                                        type='button'
+                                        onClick={() => handleRemoveFile(index)}
+                                        aria-label={`Remove ${file.name}`}
+                                        className='absolute right-1.5 top-1.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/80 text-base text-white shadow hover:bg-rose-500'
+                                    >
+                                        ×
+                                    </button>
                                 </div>
                             )
                         })}
-                        {uploadError && <p className='w-full text-xs text-rose-300'>{uploadError}</p>}
                     </div>
                 )}
 
@@ -298,7 +367,7 @@ export const ChatInput = () => {
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     multiple
-                    accept='image/*,application/pdf'
+                    accept='.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp'
                     className='hidden'
                 />
 
@@ -308,6 +377,7 @@ export const ChatInput = () => {
 
                         <button
                             onClick={handleFileInput}
+                            disabled={isGenerating}
                             className='flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:text-slate-400 hover:bg-white/[0.05] border border-transparent hover:border-white/[0.06] transition-all duration-150 bg-transparent cursor-pointer'
                         >
                             <Paperclip size={16} />
@@ -323,8 +393,8 @@ export const ChatInput = () => {
 
                     <button
                         onClick={handleSendMessage}
-                        disabled={!text.trim() || isUploading || isGenerating}
-                        title={isUploading ? 'Uploading file' : isGenerating ? 'Waiting for response' : !text.trim() ? 'Enter a message' : 'Send message'}
+                        disabled={(!text.trim() && !readyFiles.length) || isGenerating}
+                        title={isGenerating ? 'Waiting for response' : !text.trim() && !readyFiles.length ? (isUploading ? 'Wait for upload or enter a message' : 'Enter a message or attach a file') : 'Send message'}
                         className='flex items-center justify-center w-9 h-9 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed'
                     >
                         <ArrowUp size={18} />

@@ -4,6 +4,15 @@ from botocore.exceptions import ClientError
 
 s3_client = boto3.client('s3')
 
+def download_from_s3(object_key: str) -> bytes:
+    bucket_name = os.environ.get('AWS_BUCKET_NAME')
+    if not bucket_name:
+        raise RuntimeError("AWS_BUCKET_NAME is not configured")
+
+    response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+    return response['Body'].read()
+
+
 def get_from_s3(object_key: str, expires_in: int = 600):
     bucket_name = os.environ.get('AWS_BUCKET_NAME')
 

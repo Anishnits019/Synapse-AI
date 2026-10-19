@@ -8,8 +8,7 @@ s3 = boto3.client('s3')
 BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 REGION = os.getenv("AWS_DEFAULT_REGION")
 
-def upload_to_s3(file_name, buffer, content_type):
-    object_key = f"generated-pdfs/{file_name}"
+def upload_to_s3(object_key, buffer, content_type):
 
     s3.put_object(
         Bucket=BUCKET_NAME,

@@ -1,10 +1,15 @@
 from dotenv import find_dotenv, load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langchain_tavily import TavilySearch
 
 from ..config.llm_model import getModel
-from ..config.memory import getMemory
+from ..exception import AgentError, AgentExecutionError
 from ..graph.state import AgentState
+from ..logger import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 load_dotenv(find_dotenv())
 
@@ -55,15 +60,27 @@ Use the full structure below.
 """
 
 async def searchAgent(state: AgentState):
-    llm = getModel("search")
-    llm_with_tools = llm.bind_tools([tavily_tool])
-    messages = [SystemMessage(content=SEARCH_SYSTEM_PROMPT),*state.get("messages",[])]
+    logger.info("Search agent execution started")
+    try:
+        llm = getModel("search")
+        llm_with_tools = llm.bind_tools([tavily_tool])
+        messages = [
+            SystemMessage(content=SEARCH_SYSTEM_PROMPT),
+            *state.get("messages", []),
+        ]
 
-    ai_response = await llm_with_tools.ainvoke(messages)
-    state["messages"] = [ai_response]
+        ai_response = await llm_with_tools.ainvoke(messages)
+        state["messages"] = [ai_response]
 
-    if not getattr(ai_response, "tool_calls", None):
-        state["chat_response"] = ai_response.content
-        state["search_context"] = ai_response.content
+        if not getattr(ai_response, "tool_calls", None):
+            state["chat_response"] = ai_response.content
+            state["search_context"] = ai_response.content
 
-    return state
+        logger.info("Search agent completed successfully")
+        return state
+    except AgentError:
+        logger.exception("Search agent failed")
+        raise
+    except Exception as error:
+        logger.exception("Search agent failed")
+        raise AgentExecutionError("Search agent failed to process the request") from error

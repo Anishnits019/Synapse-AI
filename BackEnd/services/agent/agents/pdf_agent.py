@@ -1,15 +1,18 @@
-import os
 from typing import List
-import json
-from langchain_core.messages import HumanMessage, SystemMessage,AIMessage
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from ..config.llm_model import getModel
+from ..exception import AgentError, AgentExecutionError, AgentResponseError
 from ..graph.state import AgentState
+from ..logger import logging
 from ..utils.pdf_builder import create_pdf
-from ..config.memory import getMemory
 from ..utils.uploadTos3 import upload_to_s3
 from ..utils.getFromS3 import get_from_s3
+
+
+logger = logging.getLogger(__name__)
 
 
 class Section(BaseModel):
@@ -73,33 +76,47 @@ File Name:
 
 
 async def pdfAgent(state: AgentState):
-    llm = getModel("pdf")
-    structured_llm = llm.with_structured_output(PDFSummary)
+    logger.info("PDF agent execution started")
+    try:
+        llm = getModel("pdf")
+        structured_llm = llm.with_structured_output(PDFSummary)
+        messages = [
+            SystemMessage(content=PDF_SYSTEM_PROMPT),
+            *state.get("messages", []),
+        ]
 
-    messages = [SystemMessage(content=PDF_SYSTEM_PROMPT),*state.get("messages",[])]
+        summary = await structured_llm.ainvoke(messages)
+        summary_data = summary.model_dump()
 
-    summary = await structured_llm.ainvoke(messages)
+        filename_response = await llm.ainvoke([
+            SystemMessage(content=PDF_NAME_PROMPT),
+            HumanMessage(content=summary.model_dump_json()),
+        ])
 
-    summary_data = summary.model_dump()
+        filename = filename_response.content.strip().strip("'").strip('"')
+        if not filename:
+            raise AgentResponseError("PDF name model returned an empty file name")
+        if not filename.endswith(".pdf"):
+            filename += ".pdf"
 
-    
-    filename_response=await llm.ainvoke([
-        SystemMessage(content=PDF_NAME_PROMPT),
-        HumanMessage(content=summary.model_dump_json())
-    ])
+        pdf_buffer = create_pdf(summary_data)
+        object_key = upload_to_s3(filename, pdf_buffer, "application/pdf")
+        pdf_path = get_from_s3(object_key, expires_in=3600)
+        if not pdf_path:
+            raise AgentExecutionError(
+                "Generated PDF was uploaded but could not be retrieved"
+            )
 
-    filename=filename_response.content.strip().strip("'").strip('"')
-    if not filename.endswith(".pdf"):
-        filename=+".pdf"
-    
-    pdf_buffer = create_pdf(summary_data)
-    object_key=upload_to_s3(filename,pdf_buffer,"application/pdf")
-
-    pdf_path=get_from_s3(object_key, expires_in=3600)
-
-    state["chat_response"] = "PDF generated successfully."
-    state["artifacts"] = [{
-        "name":filename,
-        "file_path":pdf_path
-    }]
-    return state
+        state["chat_response"] = "PDF generated successfully."
+        state["artifacts"] = [{
+            "name": filename,
+            "file_path": pdf_path,
+        }]
+        logger.info("PDF agent completed successfully")
+        return state
+    except AgentError:
+        logger.exception("PDF agent failed")
+        raise
+    except Exception as error:
+        logger.exception("PDF agent failed")
+        raise AgentExecutionError("PDF agent failed to process the request") from error
