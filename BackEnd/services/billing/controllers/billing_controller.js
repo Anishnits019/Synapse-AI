@@ -1,10 +1,10 @@
 import "dotenv/config";
 import crypto from "crypto";
 import axios from "axios";
-import { AppError } from "../../../shared/errors.js";
 import { PLANS } from "../config/Plans.js";
 import { getRazorpayClient } from "../config/razorpay.js";
 import Payment from "../models/payment_model.js";
+import {AppError} from "../../../shared/errors.js";
 
 export const createOrder = async (req, res) => {
     const { plan } = req.body ?? {};

@@ -59,6 +59,7 @@ export const login = async (req, res) => {
         sameSite: "none",
         maxAge: SESSION_TTL_SECONDS * 1000,
     });
+    
     return res.status(200).json(user);
 };
 
