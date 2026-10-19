@@ -8,6 +8,7 @@ import {ChatArea} from '../components/ChatArea.jsx'
 // import Artifact from '../components/Artifact.jsx'
 export const Home = () => {
   const {userData} =useSelector(state=>state.user)
+  const isAuthLoading = useSelector(state=>state.user.isLoading)
   const dispatch=useDispatch()
 
   console.log(userData)
@@ -48,7 +49,7 @@ export const Home = () => {
     </main>
 
     {/* <Artifact/> */}
-    {!userData && 
+    {!isAuthLoading && !userData &&
     <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-[340px] rounded-2xl border border-white/10 bg-[#12151c] p-8 flex flex-col items-center gap-6 shadow-2xl shadow-black/40">
         {/* Logo/Icon area */}

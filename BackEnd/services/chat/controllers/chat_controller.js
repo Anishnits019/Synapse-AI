@@ -1,6 +1,9 @@
 import Conversation from "../models/convo_model.js";
 import Message from "../models/msg_model.js";
 import { AppError } from "../../../shared/errors.js";
+import redis from "../../../shared/redis/redis.js";
+
+const getConversationRedisKey = (conversationId) => `converstion:${conversationId}`;
 
 const requireUserId = (req) => {
     const userId = req.headers["x-user-id"];
@@ -61,15 +64,20 @@ export const updateConversation = async (req, res) => {
             "We couldn't find that conversation."
         );
     }
+    await redis.hset(getConversationRedisKey(conversationId), "title", title);
     return res.status(200).json(conversation);
 };
 
 export const deleteConversation = async (req, res) => {
+    const userID = requireUserId(req);
     const conversationId = requireValue(
         req.params?.conversation_id,
         "Please provide the conversation you want to delete."
     );
-    const conversation = await Conversation.findByIdAndDelete(conversationId);
+    const conversation = await Conversation.findOneAndDelete({
+        _id: conversationId,
+        $or: [{ userID }, { user_id: userID }],
+    });
     if (!conversation) {
         throw new AppError(
             404,
@@ -81,6 +89,7 @@ export const deleteConversation = async (req, res) => {
     const messages = await Message.deleteMany({
         conversation_id: conversationId,
     });
+    await redis.del(getConversationRedisKey(conversationId));
     return res.status(200).json({
         message: "Conversation deleted successfully.",
         delete_converstaion: conversation,

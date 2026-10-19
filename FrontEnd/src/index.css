@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+@theme {
+  --text-xs: calc(0.75rem * 1.05);
+  --text-sm: calc(0.875rem * 1.05);
+  --text-base: calc(1rem * 1.05);
+  --text-lg: calc(1.125rem * 1.05);
+  --text-xl: calc(1.25rem * 1.05);
+  --text-2xl: calc(1.5rem * 1.05);
+  --text-3xl: calc(1.875rem * 1.05);
+  --text-4xl: calc(2.25rem * 1.05);
+  --text-5xl: calc(3rem * 1.05);
+  --text-6xl: calc(3.75rem * 1.05);
+  --text-7xl: calc(4.5rem * 1.05);
+  --text-8xl: calc(6rem * 1.05);
+  --text-9xl: calc(8rem * 1.05);
+}

@@ -4,6 +4,7 @@ export const messageSlice=createSlice({
    initialState:{
     messagesList:[],
     isGenerating:false,
+    isInitializingConversation:true,
    },
    reducers:{
     setMessages:(state,action)=>{
@@ -15,6 +16,9 @@ export const messageSlice=createSlice({
     setGenerating:(state, action) => {
         state.isGenerating = action.payload;
     },
+    setInitializingConversation:(state,action)=>{
+        state.isInitializingConversation=action.payload
+    },
 //     This reducer is created here by this i can use push keyword 
 //     which is easy to do than using spread operator
 //     so i did that here and  i willpush using these reducer
@@ -22,5 +26,5 @@ export const messageSlice=createSlice({
 },
 });
 
-export const {setMessages,addMessages,setGenerating}=messageSlice.actions 
+export const {setMessages,addMessages,setGenerating,setInitializingConversation}=messageSlice.actions
 export default messageSlice.reducer

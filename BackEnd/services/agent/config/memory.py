@@ -18,12 +18,10 @@ async def getMemory(convo_id: str):
 
      redis_key =f"converstion:{convo_id}"
 
-     exists =await redis_client.exists(redis_key)
-
-     if exists:
-          cached_data=await redis_client.hget(redis_key,"messages")
-        #  Redis stores data into serializable format so when we want python object return we have to use json.loads
-          return json.loads(cached_data) if cached_data else []
+     cached_data = await redis_client.hget(redis_key, "messages")
+     if cached_data is not None:
+          # Redis stores data into serializable format so when we want python object return we have to use json.loads
+          return json.loads(cached_data)
      
      messages =await getMessages(convo_id) 
      #here messages is a dict object not a json object because it is called as a function 
@@ -68,7 +66,6 @@ async def addMessages(body:MessageModel):
                  json.dumps(messages),
             )
            return messages
-
 
 
 

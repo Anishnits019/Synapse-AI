@@ -25,7 +25,7 @@ export const ArtifactCard = ({ file }) => {
                         {file.name || 'code_snippet'}
                     </span>
                     {file.language && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 text-slate-400">
+                        <span className="text-[10.5px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 text-slate-400">
                             {file.language}
                         </span>
                     )}

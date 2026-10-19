@@ -1,8 +1,7 @@
-import React from 'react'
 import Home from './pages/Home.jsx'
 import { useEffect } from 'react'
 import { useDispatch } from 'react-redux'
-import { setUserData } from './redux/userSlice.js'
+import { setUserData, setUserLoading } from './redux/userSlice.js'
 import { getCurrentUser } from './features/getCurrentUser.js'
 
 function App() {
@@ -10,11 +9,15 @@ function App() {
 
   useEffect(()=>{
      const getUser=async()=>{
-      const data = await getCurrentUser()
-      dispatch(setUserData(data))
+      try {
+        const data = await getCurrentUser()
+        dispatch(setUserData(data))
+      } finally {
+        dispatch(setUserLoading(false))
+      }
      }
      getUser()
-  },[])
+  },[dispatch])
   return (
     <>
       <Home />

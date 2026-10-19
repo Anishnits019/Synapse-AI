@@ -74,12 +74,13 @@ async def SendMessage(body:AgentRequest, user_id: str):
             artifacts=artifacts
         ))
 
-        await client.post(f"{os.getenv('CHAT_SERVICE')}/save-message",json={
+        user_message_response = await client.post(f"{os.getenv('CHAT_SERVICE')}/save-message",json={
             "conversation_id":conversation_id,
             "role":"user",
             "content":prompt,
             "artifacts":artifacts
         })
+        user_message_response.raise_for_status()
 
         
         history=await getMemory(conversation_id)
@@ -132,6 +133,7 @@ async def SendMessage(body:AgentRequest, user_id: str):
                     "artifacts":artifacts,
                     "image_url":image_url,
         })
+        response.raise_for_status()
       
         return {
             "AIMessage": assistant_message,

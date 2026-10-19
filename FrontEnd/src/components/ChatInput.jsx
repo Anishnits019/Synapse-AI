@@ -32,6 +32,7 @@ import {upload} from "../features/upload"
 
 export const ChatInput = () => {
     const fileInputRef = useRef(null)
+    const textAreaRef = useRef(null)
     const previewUrlsRef = useRef(new Set())
     const uploadControllersRef = useRef(new Map())
     const dispatch =useDispatch()
@@ -43,12 +44,23 @@ export const ChatInput = () => {
     const selectedconverstaion = useSelector(state => state.conversation.selectedConversation)
     const conversationList = useSelector(state => state.conversation.conversationList) || []
     const text=useSelector(state=>state.chat.inputText)
+    const hasMessages = useSelector(state => state.message.messagesList.length > 0)
+    const isInitializingConversation = useSelector(state => state.message.isInitializingConversation)
     const isGenerating = useSelector(state => state.message.isGenerating)
     const [selectedAgent,setselectedAgent]=useState("auto")
     const readyFiles = selectedFiles
         .filter(({ status, uploadedFile }) => status === "ready" && uploadedFile)
         .map(({ uploadedFile }) => uploadedFile)
     const isUploading = selectedFiles.some(({ status }) => status === "uploading")
+
+    useEffect(() => {
+        const textarea = textAreaRef.current
+        if (!textarea) return
+
+        textarea.style.height = "auto"
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+        textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden"
+    }, [text])
 
     useEffect(() => () => {
         uploadControllersRef.current.forEach((controller) => controller.abort())
@@ -168,7 +180,7 @@ export const ChatInput = () => {
             conversation_id: conversation?._id,
             agent: selectedAgent,
             artifacts: readyFiles,
-            generate_title: conversation?.title === "New Chat",
+            generate_title: !conversation?.title || conversation.title === "New Chat",
         }
  
 
@@ -180,6 +192,7 @@ export const ChatInput = () => {
             role:"user",
             content:userMessage,
             artifacts: readyFiles,
+            _conversationId: conversation._id,
         }))
         const sentFileIds = new Set(
             selectedFiles
@@ -224,7 +237,8 @@ export const ChatInput = () => {
                         role: "assistant",
                         content: response.AIMessage,
                         artifacts: response.artifacts || [],
-                        image_url: response.image_url || null
+                        image_url: response.image_url || null,
+                        _conversationId: conversation._id,
                     }))
                 }
             } finally {
@@ -273,10 +287,10 @@ export const ChatInput = () => {
   ]
     return (
 
-        <div className='w-full shrink-0 overflow-hidden border-t border-white/[0.06] bg-[#0d0f14] px-3 py-3 md:px-5 md:py-4'>
+        <div className={`z-10 w-full shrink-0 px-3 py-3 md:px-5 md:py-4 ${hasMessages || isInitializingConversation ? 'relative' : 'absolute inset-x-0 top-1/2 -translate-y-1/2'}`}>
         
-            <div className='flex flex-col gap-2 bg-white/[0.03] border border-white/[0.07] rounded-2xl px-4 pt-3.5 pb-3'>
-                <div className='flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
+            <div className='mx-auto flex w-full max-w-3xl flex-col gap-1.5 rounded-2xl border border-white/[0.07] bg-[#11141b] px-3.5 py-2.5 shadow-xl shadow-black/10 md:px-4'>
+                <div className='flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
                 {agents.map((a)=>{
                     const isActive=selectedAgent===a.label
                     return (
@@ -291,8 +305,8 @@ export const ChatInput = () => {
                      shrink-0
                      items-center
                      gap-1.5
-                     px-3
-                     py-2
+                     px-2.5
+                     py-1.5
                      rounded-full
                      text-xs
                      font-medium
@@ -305,7 +319,7 @@ export const ChatInput = () => {
                     `}>
 
                                         <a.icon
-                                            size={16}
+                                            size={14}
                                             className={isActive ? "text-white" : "text-slate-500"}
                                         />
                     <span>{a.label}</span>
@@ -314,9 +328,10 @@ export const ChatInput = () => {
                 })}
                 </div>
                 <textarea
+                    ref={textAreaRef}
                     placeholder='Ask Anything...'
-                    className='w-full bg-transparent outline-none resize-none text-[14px] text-slate-200 placeholder:text-slate-600 leading-relaxed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden disabled:opacity-50'
-                    rows={3}
+                    className='max-h-40 min-h-6 w-full resize-none overflow-y-hidden bg-transparent text-[14.7px] leading-6 text-slate-200 outline-none placeholder:text-slate-600 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden disabled:opacity-50'
+                    rows={1}
                     value={text}
                     onChange={handleTextInput}
                     onKeyDown={handleTextKeyDown}
@@ -339,12 +354,12 @@ export const ChatInput = () => {
                                     ) : (
                                         <div className='flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-1 bg-white/[0.04] text-indigo-300'>
                                             <FileText size={20} />
-                                            <span className='text-[9px] font-semibold'>{fileExtension}</span>
+                                            <span className='text-[9.45px] font-semibold'>{fileExtension}</span>
                                         </div>
                                     )}
                                     <div className='min-w-0'>
                                         <p className='truncate text-xs font-medium text-slate-200'>{file.name}</p>
-                                        <p className={`mt-1 truncate text-[10px] ${status === 'failed' ? 'text-rose-300' : 'text-slate-500'}`} title={error}>
+                                        <p className={`mt-1 truncate text-[10.5px] ${status === 'failed' ? 'text-rose-300' : 'text-slate-500'}`} title={error}>
                                             {status === 'uploading' ? `Uploading ${progress}%` : status === 'failed' ? error : 'Ready to send'}
                                         </p>
                                     </div>

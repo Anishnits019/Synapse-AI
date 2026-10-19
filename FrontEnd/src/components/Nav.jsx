@@ -1,4 +1,3 @@
-import React from 'react'
 import { useSelector } from 'react-redux'
 import { MessageSquare } from 'lucide-react'
 export const Nav = () => {
@@ -13,11 +12,11 @@ export const Nav = () => {
         <MessageSquare size={13} className="text-indigo-400"/>
         </div>
 
-        <div className='text-[14px] font-semibold text-slate-100 tracking-tight'>
+        <div className='text-[14.7px] font-semibold text-slate-100 tracking-tight'>
             {selectedConversation?.title || "New Chat"}
         </div>
 
-        <div className='text-[10px] font-medium text-slate-600 bg-white/[0.04] border border-white/[0.06] px-2 py-0.5 rounded-full'>
+        <div className='text-[10.5px] font-medium text-slate-600 bg-white/[0.04] border border-white/[0.06] px-2 py-0.5 rounded-full'>
         {messages?.length} Messages
         </div>
 
